@@ -1,0 +1,1 @@
+const t={ADMIN:"admin",USER:"user",VIP:"vip"},o={[t.ADMIN]:{label:"管理员",type:"danger",color:"#f56c6c"},[t.USER]:{label:"普通用户",type:"primary",color:"#409eff"},[t.VIP]:{label:"VIP会员",type:"success",color:"#67c23a"}},r=e=>o[e]||o[t.USER],l=e=>r(e).label,c=e=>r(e).type,n=e=>e===t.ADMIN;export{l as a,c as g,n as i};
