@@ -140,7 +140,9 @@
               </div>
             </div>
 
-            <div v-if="commentsLoading[post.id]" class="comment-empty">评论加载中...</div>
+            <div v-if="commentsLoading[post.id] && !(commentsByPost[post.id]?.length)" class="comment-empty">
+              评论加载中...
+            </div>
 
             <div v-else-if="commentsByPost[post.id]?.length" class="comment-list">
               <div
@@ -252,10 +254,32 @@
               </div>
             </div>
 
+            <button
+              v-if="commentsByPost[post.id]?.length && commentsHasMoreByPost[post.id]"
+              type="button"
+              class="comment-load-more"
+              :disabled="commentsLoading[post.id]"
+              @click="handleLoadMoreComments(post.id)"
+            >
+              {{ commentsLoading[post.id] ? '加载中...' : '加载更多评论' }}
+            </button>
+
+            <div
+              v-else-if="commentsByPost[post.id]?.length && !commentsHasMoreByPost[post.id]"
+              class="comment-load-end"
+            >
+              已经没有更多评论了
+            </div>
+
             <div v-else class="comment-empty">还没有评论，来抢个沙发吧</div>
           </div>
         </div>
       </article>
+    </div>
+
+    <div v-if="filteredPosts.length" class="timeline-status">
+      <div v-if="loadingMorePosts" class="timeline-status-copy">正在加载更多说说...</div>
+      <div v-else-if="!hasMorePosts" class="timeline-status-copy">已经没有更多数据了</div>
     </div>
 
     <div v-else-if="!loading" class="empty-state">暂时还没有生活动态</div>
@@ -301,12 +325,19 @@ type PostCommentItem = {
 const siteInfo = useSiteInfoStore().siteInfo
 const loginUserStore = useLoginUserStore()
 const loading = ref(false)
+const loadingMorePosts = ref(false)
 const activeTag = ref('全部')
 const lifePosts = ref<LifePost[]>([])
 const postsPublicData = ref<API.PostPublicData>({})
+const lifePostPage = ref(1)
+const lifePostPageSize = 10
+const hasMorePosts = ref(true)
 const commentsByPost = ref<Record<string, PostCommentItem[]>>({})
 const commentsVisible = ref<Record<string, boolean>>({})
 const commentsLoading = ref<Record<string, boolean>>({})
+const commentsLoaded = ref<Record<string, boolean>>({})
+const commentsPageByPost = ref<Record<string, number>>({})
+const commentsHasMoreByPost = ref<Record<string, boolean>>({})
 const commentDrafts = ref<Record<string, string>>({})
 const replyDraftsByComment = ref<Record<string, string>>({})
 const replyTargetByPost = ref<Record<string, { id: string; userName: string } | null>>({})
@@ -437,32 +468,32 @@ const filteredPosts = computed(() => {
   return lifePosts.value.filter((post) => post.tags.includes(activeTag.value))
 })
 
-const setCommentInputRef = (postId: string, el: InputInstance | null) => {
-  commentInputRefs.value = {
-    ...commentInputRefs.value,
-    [postId]: el,
+const handlePageScroll = async () => {
+  if (loading.value || loadingMorePosts.value || !hasMorePosts.value) return
+
+  const scrollTop = window.scrollY || document.documentElement.scrollTop || 0
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
+  const fullHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0
+
+  if (scrollTop + viewportHeight >= fullHeight - 220) {
+    await fetchLifePosts(true)
   }
+}
+
+const setCommentInputRef = (postId: string, el: InputInstance | null) => {
+  commentInputRefs.value[postId] = el
 }
 
 const setReplyInputRef = (commentId: string, el: InputInstance | null) => {
-  replyInputRefs.value = {
-    ...replyInputRefs.value,
-    [commentId]: el,
-  }
+  replyInputRefs.value[commentId] = el
 }
 
 const setCommentEmojiWrapRef = (postId: string, el: HTMLDivElement | null) => {
-  commentEmojiWrapRefs.value = {
-    ...commentEmojiWrapRefs.value,
-    [postId]: el,
-  }
+  commentEmojiWrapRefs.value[postId] = el
 }
 
 const setReplyEmojiWrapRef = (commentId: string, el: HTMLDivElement | null) => {
-  replyEmojiWrapRefs.value = {
-    ...replyEmojiWrapRefs.value,
-    [commentId]: el,
-  }
+  replyEmojiWrapRefs.value[commentId] = el
 }
 
 const toggleEmojiPanel = async (postId: string) => {
@@ -566,16 +597,26 @@ const fetchPostsPublicData = async () => {
   }
 }
 
-const fetchLifePosts = async () => {
-  loading.value = true
+const fetchLifePosts = async (append = false) => {
+  if (append) {
+    if (loadingMorePosts.value || !hasMorePosts.value) return
+    loadingMorePosts.value = true
+  } else {
+    loading.value = true
+    lifePostPage.value = 1
+    hasMorePosts.value = true
+  }
+
   try {
-    await fetchPostsPublicData()
+    if (!postsPublicData.value?.mood || !postsPublicData.value?.postType) {
+      await fetchPostsPublicData()
+    }
 
     const res = await getFrontPostsList(
       {
         pageRequest: {
-          current: 1,
-          pageSize: 100,
+          current: lifePostPage.value,
+          pageSize: lifePostPageSize,
         },
       },
       {
@@ -584,15 +625,33 @@ const fetchLifePosts = async () => {
     )
 
     if (res.data.code === 0) {
-      lifePosts.value = (res.data.data?.records || []).map(mapLifePost)
+      const records = (res.data.data?.records || []).map(mapLifePost)
+      const total = Number(res.data.data?.total || 0)
+
+      lifePosts.value = append ? [...lifePosts.value, ...records] : records
+      hasMorePosts.value = total > 0 ? lifePosts.value.length < total : records.length === lifePostPageSize
+
+      if (records.length > 0) {
+        lifePostPage.value += 1
+      }
+
       return
     }
 
-    lifePosts.value = []
+    if (!append) {
+      lifePosts.value = []
+    }
+    hasMorePosts.value = false
   } catch {
-    lifePosts.value = []
+    if (!append) {
+      lifePosts.value = []
+    }
   } finally {
-    loading.value = false
+    if (append) {
+      loadingMorePosts.value = false
+    } else {
+      loading.value = false
+    }
   }
 }
 
@@ -622,7 +681,9 @@ const handleToggleLike = async (postId: string) => {
   }
 }
 
-const fetchPostComments = async (postId: string) => {
+const fetchPostComments = async (postId: string, append = false) => {
+  if (commentsLoading.value[postId]) return
+
   commentsLoading.value = {
     ...commentsLoading.value,
     [postId]: true,
@@ -633,8 +694,8 @@ const fetchPostComments = async (postId: string) => {
       {
         postCommentQueryRequest: {
           postId: postId as never,
-          current: 1,
-          pageSize: 100,
+          current: append ? (commentsPageByPost.value[postId] || 1) : 1,
+          pageSize: 5,
           sortField: 'createdAt',
           sortOrder: 'ascend',
         },
@@ -648,14 +709,34 @@ const fetchPostComments = async (postId: string) => {
     const commentMap: Map<string, API.PostCommentVo> = new Map(
       records.map((item: any) => [String(item.id || ''), item]),
     )
+    const mappedRecords = records.map((item: any) => mapPostComment(item, commentMap))
+
     commentsByPost.value = {
       ...commentsByPost.value,
-      [postId]: records.map((item: any) => mapPostComment(item, commentMap)),
+      [postId]: append ? [...(commentsByPost.value[postId] || []), ...mappedRecords] : mappedRecords,
+    }
+    commentsLoaded.value = {
+      ...commentsLoaded.value,
+      [postId]: true,
+    }
+    commentsPageByPost.value = {
+      ...commentsPageByPost.value,
+      [postId]: (append ? (commentsPageByPost.value[postId] || 1) : 1) + 1,
+    }
+    commentsHasMoreByPost.value = {
+      ...commentsHasMoreByPost.value,
+      [postId]: Number(res.data.data?.total || 0) > (commentsByPost.value[postId]?.length || 0),
     }
   } catch {
-    commentsByPost.value = {
-      ...commentsByPost.value,
-      [postId]: [],
+    if (!append) {
+      commentsByPost.value = {
+        ...commentsByPost.value,
+        [postId]: [],
+      }
+    }
+    commentsHasMoreByPost.value = {
+      ...commentsHasMoreByPost.value,
+      [postId]: append ? Boolean(commentsHasMoreByPost.value[postId]) : false,
     }
   } finally {
     commentsLoading.value = {
@@ -666,6 +747,8 @@ const fetchPostComments = async (postId: string) => {
 }
 
 const handleToggleComments = async (postId: string) => {
+  if (commentsLoading.value[postId]) return
+
   const isVisible = Boolean(commentsVisible.value[postId])
 
   commentsVisible.value = {
@@ -673,9 +756,14 @@ const handleToggleComments = async (postId: string) => {
     [postId]: !isVisible,
   }
 
-  if (!isVisible && commentsByPost.value[postId] === undefined) {
+  if (!isVisible && !commentsLoaded.value[postId]) {
     await fetchPostComments(postId)
   }
+}
+
+const handleLoadMoreComments = async (postId: string) => {
+  if (commentsLoading.value[postId] || !commentsHasMoreByPost.value[postId]) return
+  await fetchPostComments(postId, true)
 }
 
 const handleReplyComment = (postId: string, commentId: string, userName: string) => {
@@ -818,11 +906,13 @@ const handleSubmitReplyComment = async (postId: string, comment: PostCommentItem
 
 onMounted(async () => {
   document.addEventListener('pointerdown', handleDocumentPointerDown)
+  window.addEventListener('scroll', handlePageScroll, { passive: true })
   await fetchLifePosts()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  window.removeEventListener('scroll', handlePageScroll)
 })
 </script>
 
@@ -1432,6 +1522,44 @@ onBeforeUnmount(() => {
   margin-top: 6px;
 }
 
+.comment-load-more,
+.comment-load-end {
+  margin-top: 10px;
+}
+
+.comment-load-more {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(173, 189, 214, 0.42);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #4d678f;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.comment-load-more:hover {
+  transform: translateY(-1px);
+  border-color: rgba(86, 125, 211, 0.42);
+  background: rgba(239, 245, 255, 0.96);
+}
+
+.comment-load-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.comment-load-end {
+  color: #8a98b0;
+  font-size: 12px;
+  text-align: center;
+}
+
 .reply-compose {
   display: grid;
   gap: 10px;
@@ -1499,6 +1627,18 @@ onBeforeUnmount(() => {
   color: #6480a4;
   text-align: center;
   background: rgba(255, 255, 255, 0.76);
+}
+
+.timeline-status {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.timeline-status-copy {
+  color: #7d8ba6;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 @media (max-width: 900px) {

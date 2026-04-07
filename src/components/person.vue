@@ -66,7 +66,13 @@
           </div>
 
           <div class="btn-group">
-            <el-button type="primary" @click="handleLogin">登录</el-button>
+            <el-button
+              type="primary"
+              :loading="loginSubmitting"
+              :disabled="loginSubmitting"
+              @click="handleLogin"
+              >登录</el-button
+            >
           </div>
 
           <div class="switch-tip">
@@ -104,7 +110,13 @@
           </div>
 
           <div class="btn-group">
-            <el-button type="primary" @click="handleRegister">注册</el-button>
+            <el-button
+              type="primary"
+              :loading="registerSubmitting"
+              :disabled="registerSubmitting"
+              @click="handleRegister"
+              >注册</el-button
+            >
           </div>
 
           <div class="switch-tip">
@@ -135,6 +147,8 @@ const router = useRouter()
 
 const isOpenLogin = ref(false)
 const loginOrRegister = ref(true)
+const loginSubmitting = ref(false)
+const registerSubmitting = ref(false)
 
 const registerUserInfo = reactive<API.UserRegisterRequest>({
   username: '',
@@ -148,6 +162,8 @@ const loginUserInfo = reactive<API.UserLoginRequest>({
 })
 
 const handleRegister = async () => {
+  if (registerSubmitting.value) return
+
   if (!registerUserInfo.username || !registerUserInfo.password || !registerUserInfo.checkPassword) {
     ElMessage.error('请填写完整的注册信息')
     return
@@ -169,17 +185,25 @@ const handleRegister = async () => {
     return
   }
 
-  const res = await regist(registerUserInfo)
-  if (res.data.code === 0 && res.data.data) {
-    ElMessage.success('注册成功')
-    loginOrRegister.value = true
-    registerUserInfo.username = ''
-    registerUserInfo.password = ''
-    registerUserInfo.checkPassword = ''
+  registerSubmitting.value = true
+
+  try {
+    const res = await regist(registerUserInfo)
+    if (res.data.code === 0 && res.data.data) {
+      ElMessage.success('注册成功')
+      loginOrRegister.value = true
+      registerUserInfo.username = ''
+      registerUserInfo.password = ''
+      registerUserInfo.checkPassword = ''
+    }
+  } finally {
+    registerSubmitting.value = false
   }
 }
 
 const handleLogin = async () => {
+  if (loginSubmitting.value) return
+
   if (!loginUserInfo.username || !loginUserInfo.password) {
     ElMessage.error('请填写完整的登录信息')
     return
@@ -196,15 +220,21 @@ const handleLogin = async () => {
     return
   }
 
-  const res = await login(loginUserInfo)
-  const loginUser = res.data.data
+  loginSubmitting.value = true
 
-  if (res.data.code === 0 && loginUser) {
-    ElMessage.success('登录成功')
-    isOpenLogin.value = false
-    loginUserInfo.username = ''
-    loginUserInfo.password = ''
-    loginUserStore.setLoginUser(loginUser)
+  try {
+    const res = await login(loginUserInfo)
+    const loginUser = res.data.data
+
+    if (res.data.code === 0 && loginUser) {
+      ElMessage.success('登录成功')
+      isOpenLogin.value = false
+      loginUserInfo.username = ''
+      loginUserInfo.password = ''
+      loginUserStore.setLoginUser(loginUser)
+    }
+  } finally {
+    loginSubmitting.value = false
   }
 }
 

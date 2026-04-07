@@ -53,7 +53,13 @@
           </div>
 
           <div class="btn-group">
-            <el-button type="primary" @click="handleLogin">登录</el-button>
+            <el-button
+              type="primary"
+              :loading="loginSubmitting"
+              :disabled="loginSubmitting"
+              @click="handleLogin"
+              >登录</el-button
+            >
           </div>
 
           <div class="switch-tip">
@@ -91,7 +97,13 @@
           </div>
 
           <div class="btn-group">
-            <el-button type="primary" @click="handleRegister">注册</el-button>
+            <el-button
+              type="primary"
+              :loading="registerSubmitting"
+              :disabled="registerSubmitting"
+              @click="handleRegister"
+              >注册</el-button
+            >
           </div>
 
           <div class="switch-tip">
@@ -129,6 +141,8 @@ const { loginUser } = storeToRefs(loginUserStore)
 const loading = ref(false)
 const isAuthDialogVisible = ref(false)
 const loginOrRegister = ref(true)
+const loginSubmitting = ref(false)
+const registerSubmitting = ref(false)
 
 const loginForm = reactive<API.UserLoginRequest>({
   username: '',
@@ -429,20 +443,30 @@ const validateAccountForm = (username: string, password: string) => {
 }
 
 const handleLogin = async () => {
+  if (loginSubmitting.value) return
+
   if (!validateAccountForm(loginForm.username || '', loginForm.password || '')) {
     return
   }
 
-  const res = await login(loginForm)
-  if (res.data.code === 0 && res.data.data) {
-    loginUserStore.setLoginUser(res.data.data)
-    resetLoginForm()
-    isAuthDialogVisible.value = false
-    ElMessage.success('登录成功')
+  loginSubmitting.value = true
+
+  try {
+    const res = await login(loginForm)
+    if (res.data.code === 0 && res.data.data) {
+      loginUserStore.setLoginUser(res.data.data)
+      resetLoginForm()
+      isAuthDialogVisible.value = false
+      ElMessage.success('登录成功')
+    }
+  } finally {
+    loginSubmitting.value = false
   }
 }
 
 const handleRegister = async () => {
+  if (registerSubmitting.value) return
+
   if (!validateAccountForm(registerForm.username || '', registerForm.password || '')) {
     return
   }
@@ -457,11 +481,17 @@ const handleRegister = async () => {
     return
   }
 
-  const res = await regist(registerForm)
-  if (res.data.code === 0) {
-    resetRegisterForm()
-    loginOrRegister.value = true
-    ElMessage.success('注册成功，请登录后发表评论')
+  registerSubmitting.value = true
+
+  try {
+    const res = await regist(registerForm)
+    if (res.data.code === 0) {
+      resetRegisterForm()
+      loginOrRegister.value = true
+      ElMessage.success('注册成功，请登录后发表评论')
+    }
+  } finally {
+    registerSubmitting.value = false
   }
 }
 
