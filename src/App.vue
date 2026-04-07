@@ -1,6 +1,7 @@
 <template>
   <div class="container" data-theme="light">
     <RouterView />
+    <AppBootstrapOverlay />
   </div>
 </template>
 <script setup lang="ts">
@@ -8,6 +9,7 @@ import { RouterView } from 'vue-router'
 import { useSiteInfoStore } from './stores/siteInfo'
 import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import AppBootstrapOverlay from '@/components/AppBootstrapOverlay.vue'
 
 let site = useSiteInfoStore()
 let { siteInfo } = storeToRefs(site)
@@ -33,6 +35,6 @@ const setSiteInfo = () => {
 
 watch(siteInfo, () => {
   setSiteInfo()
-})
+}, { immediate: true })
 </script>
 <style scoped></style>

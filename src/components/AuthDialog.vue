@@ -83,6 +83,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow-y: auto;
   background:
     radial-gradient(circle at top, rgba(108, 130, 255, 0.28), transparent 34%),
     linear-gradient(135deg, rgba(10, 22, 44, 0.74), rgba(20, 33, 61, 0.84));
@@ -93,6 +94,7 @@ onBeforeUnmount(() => {
 .modal-shell {
   position: relative;
   width: min(100%, 500px);
+  max-height: calc(100vh - 48px);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 28px;
@@ -137,6 +139,7 @@ onBeforeUnmount(() => {
 
 .modal-body {
   padding: 24px 28px 30px;
+  overflow-y: auto;
 }
 
 .modal-close {
@@ -234,12 +237,13 @@ onBeforeUnmount(() => {
 
 @media (max-width: 640px) {
   .modal-overlay {
-    padding: 14px;
-    align-items: flex-end;
+    align-items: center;
+    padding: max(18px, env(safe-area-inset-top)) 14px 18px;
   }
 
   .modal-shell {
     width: 100%;
+    max-height: calc(100vh - 36px - env(safe-area-inset-top));
     border-radius: 26px 26px 22px 22px;
   }
 

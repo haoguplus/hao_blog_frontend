@@ -10,11 +10,12 @@ export const useSiteInfoStore = defineStore('siteInfo', () => {
     siteInfo.value = newSiteInfo
   }
 
-  async function fetcSiteInfo() {
-    let res = await getSysInfo()
+  async function fetcSiteInfo(options?: { [key: string]: any }) {
+    let res = await getSysInfo(options)
     if (res.data.code === 0 && res.data.data) {
       siteInfo.value = res.data.data
     }
+    return res
   }
 
   return { siteInfo, setSiteInfo, fetcSiteInfo }

@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { useSiteInfoStore } from '@/stores/siteInfo'
+import { useAppBootstrapStore } from '@/stores/appBootstrap'
 import { setPendingScrollRestore } from '@/utils/scrollRestore'
+import { runAppBootstrap } from '@/utils/appBootstrap'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -116,19 +117,35 @@ const router = createRouter({
   ],
 })
 let firstFetch = true
-router.beforeEach(async (to, from, next) => {
-  const loginUserStore = useLoginUserStore()
-  const siteInfoStore = useSiteInfoStore()
+let bootstrapPromise: Promise<void> | null = null
 
-  let loginUser = loginUserStore.loginUser
-  if (firstFetch) {
-    await loginUserStore.fetchLoginUser()
-    await siteInfoStore.fetcSiteInfo()
-    loginUser = loginUserStore.loginUser
-
-    firstFetch = false
+const ensureAppBootstrap = async () => {
+  if (!bootstrapPromise) {
+    bootstrapPromise = runAppBootstrap().finally(() => {
+      bootstrapPromise = null
+    })
   }
 
+  return bootstrapPromise
+}
+
+router.beforeEach(async (to, from, next) => {
+  const loginUserStore = useLoginUserStore()
+  const appBootstrapStore = useAppBootstrapStore()
+
+  appBootstrapStore.setTargetPath(to.fullPath)
+
+  if (firstFetch) {
+    try {
+      await ensureAppBootstrap()
+      firstFetch = false
+    } catch {
+      next(false)
+      return
+    }
+  }
+
+  const loginUser = loginUserStore.loginUser
   if (to.path.startsWith('/admin') && to.name != 'adminLogin') {
     if (!loginUser.id) {
       next('/admin/login')

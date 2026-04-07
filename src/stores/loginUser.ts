@@ -10,11 +10,12 @@ export const useLoginUserStore = defineStore('loginUser', () => {
     loginUser.value = newUser
   }
 
-  async function fetchLoginUser() {
-    let res = await getLoginUser()
+  async function fetchLoginUser(options?: { [key: string]: any }) {
+    let res = await getLoginUser(options)
     if (res.data.code === 0 && res.data.data) {
       loginUser.value = res.data.data
     }
+    return res
   }
 
   return { loginUser, setLoginUser, fetchLoginUser }
