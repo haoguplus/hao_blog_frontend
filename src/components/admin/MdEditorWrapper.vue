@@ -170,6 +170,8 @@ const handleChange = (value: string) => {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   border-radius: 18px;
   overflow: hidden;
@@ -180,10 +182,34 @@ const handleChange = (value: string) => {
 :deep(.md-editor-input-wrapper),
 :deep(.md-editor-input),
 :deep(.md-editor-preview-wrapper) {
-  width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+:deep(.md-editor-content) {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:deep(.md-editor-input-wrapper),
+:deep(.md-editor-preview-wrapper) {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+:deep(.md-editor-preview-wrapper) {
+  overflow: auto;
+  border-left: 1px solid rgba(214, 223, 236, 0.9);
+  background: #ffffff;
+}
+
+:deep(.md-editor-preview) {
+  min-width: 0;
+  color: #1f2a44;
+  background: #ffffff;
 }
 
 :deep(.md-editor-toolbar) {

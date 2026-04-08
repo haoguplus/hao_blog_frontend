@@ -88,7 +88,8 @@
     <el-pagination
       class="my-pagination"
       background
-      layout="prev, pager, next, jumper"
+      :layout="paginationLayout"
+      :pager-count="paginationPagerCount"
       :page-size="pageSize"
       :current-page="currentPage"
       :total="total"
@@ -98,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useSiteInfoStore } from '@/stores/siteInfo'
@@ -113,8 +114,26 @@ const total = ref(0)
 const articles = ref<FrontArticle[]>([])
 const currentPage = ref(1)
 const pageSize = ref(6)
+const isMobilePagination = ref(false)
+const isTabletPagination = ref(false)
 
 const paginatedArticles = computed(() => articles.value)
+const paginationLayout = computed(() => {
+  if (isMobilePagination.value) return 'prev, pager, next'
+  if (isTabletPagination.value) return 'prev, pager, next'
+  return 'prev, pager, next, jumper'
+})
+const paginationPagerCount = computed(() => {
+  if (isMobilePagination.value) return 3
+  if (isTabletPagination.value) return 5
+  return 5
+})
+
+const syncPaginationViewport = () => {
+  const width = window.innerWidth
+  isMobilePagination.value = width <= 640
+  isTabletPagination.value = width > 640 && width <= 960
+}
 
 const fetchArticles = async () => {
   loading.value = true
@@ -165,7 +184,13 @@ function openCategory(category: string) {
 }
 
 onMounted(() => {
+  syncPaginationViewport()
+  window.addEventListener('resize', syncPaginationViewport, { passive: true })
   fetchArticles()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncPaginationViewport)
 })
 </script>
 
@@ -587,6 +612,7 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin: 8px auto 0;
+  padding: 0 12px;
 }
 
 .my-pagination :deep(.btn-prev),
@@ -649,15 +675,59 @@ onMounted(() => {
   margin: 0;
 }
 
+.my-pagination :deep(.el-pagination) {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 @media (max-width: 900px) {
   .article-item {
     flex-direction: column;
+    min-height: 0;
   }
 
   .article-cover {
     width: 100%;
     height: 170px;
     clip-path: none;
+  }
+
+  .article-right {
+    padding: 18px 18px 20px;
+  }
+
+  .article-topline {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .article-title {
+    font-size: 21px;
+  }
+
+  .my-pagination {
+    margin-top: 12px;
+    padding: 0 8px;
+  }
+
+  .my-pagination :deep(.el-pagination) {
+    gap: 6px;
+  }
+
+  .my-pagination :deep(.btn-prev),
+  .my-pagination :deep(.btn-next),
+  .my-pagination :deep(.number),
+  .my-pagination :deep(.btn-quicknext),
+  .my-pagination :deep(.btn-quickprev) {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 11px !important;
+    font-size: 12px;
+  }
+
+  .my-pagination :deep(.el-pager) {
+    gap: 6px;
   }
 }
 
@@ -683,6 +753,28 @@ onMounted(() => {
 
   .article-title {
     font-size: 21px;
+  }
+}
+
+@media (max-width: 640px) {
+  .my-pagination {
+    margin-top: 12px;
+    padding: 0 4px;
+  }
+
+  .my-pagination :deep(.btn-prev),
+  .my-pagination :deep(.btn-next),
+  .my-pagination :deep(.number),
+  .my-pagination :deep(.btn-quicknext),
+  .my-pagination :deep(.btn-quickprev) {
+    min-width: 34px;
+    height: 34px;
+    border-radius: 10px !important;
+    font-size: 12px;
+  }
+
+  .my-pagination :deep(.el-pager) {
+    gap: 6px;
   }
 }
 </style>
