@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useSiteInfoStore } from '@/stores/siteInfo'
@@ -128,6 +128,15 @@ const paginationPagerCount = computed(() => {
   if (isTabletPagination.value) return 5
   return 5
 })
+
+const resolvePageNumber = (value: unknown) => {
+  const rawValue = Array.isArray(value) ? value[0] : value
+  const parsedValue = Number(rawValue)
+
+  if (!Number.isFinite(parsedValue)) return 1
+
+  return Math.max(1, Math.trunc(parsedValue))
+}
 
 const syncPaginationViewport = () => {
   const width = window.innerWidth
@@ -167,8 +176,20 @@ const formatPreviewTags = (tags: string[]) => {
 }
 
 async function handlePageChange(page: number) {
-  currentPage.value = page
-  await fetchArticles()
+  if (page === currentPage.value) return
+
+  const nextQuery = { ...route.query }
+  if (page <= 1) {
+    delete nextQuery.page
+  } else {
+    nextQuery.page = String(page)
+  }
+
+  await router.replace({
+    path: route.path,
+    query: nextQuery,
+  })
+
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -186,12 +207,28 @@ function openCategory(category: string) {
 onMounted(() => {
   syncPaginationViewport()
   window.addEventListener('resize', syncPaginationViewport, { passive: true })
-  fetchArticles()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', syncPaginationViewport)
 })
+
+watch(
+  () => route.query.page,
+  async (pageQuery) => {
+    const nextPage = resolvePageNumber(pageQuery)
+    const shouldReuseCurrentPage = nextPage === currentPage.value && articles.value.length > 0
+
+    if (shouldReuseCurrentPage) {
+      applyPendingScrollRestore(route.fullPath)
+      return
+    }
+
+    currentPage.value = nextPage
+    await fetchArticles()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

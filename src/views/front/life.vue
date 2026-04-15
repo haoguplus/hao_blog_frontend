@@ -13,16 +13,18 @@
           <span class="hero-meta-item">最近更新：{{ latestPostDate }}</span>
         </div>
       </div>
+      <img src="@/assets/image/0b267c7f1376b71dff8c7af0e2a460ee.png" class="hero-bg" />
     </header>
 
     <div v-if="tags.length > 1" class="filter-bar">
       <button
         v-for="tag in tags"
         :key="tag"
+        :ref="(el) => setFilterChipRef(tag, el as HTMLButtonElement | null)"
         type="button"
         class="filter-chip"
         :class="{ 'is-active': activeTag === tag }"
-        @click="activeTag = tag"
+        @click="handleSelectTag(tag)"
       >
         {{ tag }}
       </button>
@@ -67,7 +69,15 @@
 
           <div class="post-footer" :class="{ 'post-footer-no-tags': !post.tags.length }">
             <div v-if="post.tags.length" class="tag-group">
-              <span v-for="item in post.tags" :key="item" class="post-tag">#{{ item }}</span>
+              <button
+                v-for="item in post.tags"
+                :key="item"
+                type="button"
+                class="post-tag"
+                @click="handleSelectTag(item)"
+              >
+                #{{ item }}
+              </button>
             </div>
             <div class="post-actions">
               <button
@@ -90,11 +100,11 @@
             </div>
           </div>
 
-            <div v-if="commentsVisible[post.id]" class="comment-panel">
-              <div class="comment-compose">
-                <el-input
-                  :ref="(el: InputInstance | null) => setCommentInputRef(post.id, el)"
-                  v-model="commentDrafts[post.id]"
+          <div v-if="commentsVisible[post.id]" class="comment-panel">
+            <div class="comment-compose">
+              <el-input
+                :ref="(el: InputInstance | null) => setCommentInputRef(post.id, el)"
+                v-model="commentDrafts[post.id]"
                 type="textarea"
                 :rows="2"
                 resize="none"
@@ -140,7 +150,10 @@
               </div>
             </div>
 
-            <div v-if="commentsLoading[post.id] && !(commentsByPost[post.id]?.length)" class="comment-empty">
+            <div
+              v-if="commentsLoading[post.id] && !commentsByPost[post.id]?.length"
+              class="comment-empty"
+            >
               评论加载中...
             </div>
 
@@ -229,7 +242,11 @@
                           </div>
                         </div>
                         <span class="comment-tip">
-                          {{ loginUserStore.loginUser.id ? '文明发言，友善交流' : '登录后即可发表评论' }}
+                          {{
+                            loginUserStore.loginUser.id
+                              ? '文明发言，友善交流'
+                              : '登录后即可发表评论'
+                          }}
                         </span>
                       </div>
                       <div class="reply-compose-actions">
@@ -287,7 +304,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, type InputInstance } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { getPostCommentList, pushPostComment } from '@/api/componentController'
@@ -345,9 +362,29 @@ const commentInputRefs = ref<Record<string, InputInstance | null>>({})
 const replyInputRefs = ref<Record<string, InputInstance | null>>({})
 const commentEmojiWrapRefs = ref<Record<string, HTMLDivElement | null>>({})
 const replyEmojiWrapRefs = ref<Record<string, HTMLDivElement | null>>({})
+const filterChipRefs = ref<Record<string, HTMLButtonElement | null>>({})
 const activeEmojiPostId = ref<string | null>(null)
 const activeReplyEmojiCommentId = ref<string | null>(null)
-const emojiOptions = ['😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥳', '🤔', '😎', '😭', '😡', '👍', '👏', '🙏', '🎉', '❤️', '🔥']
+const emojiOptions = [
+  '😀',
+  '😁',
+  '😂',
+  '🤣',
+  '😊',
+  '😍',
+  '😘',
+  '🥳',
+  '🤔',
+  '😎',
+  '😭',
+  '😡',
+  '👍',
+  '👏',
+  '🙏',
+  '🎉',
+  '❤️',
+  '🔥',
+]
 
 const mapLabelByValue = (source?: Record<string, any>) =>
   new Map(
@@ -439,15 +476,15 @@ const mapPostComment = (
   const replyUser = replyId ? commentMap?.get(replyId)?.user : undefined
   const commentUser = resolvePostCommentUser(comment)
 
-    return {
-      id: String(comment.id || ''),
-      postId: String(comment.postId || ''),
-      replyId,
-      content: String(comment.content || '').trim(),
-      createdAt: formatCommentDate(comment.createdAt),
-      userName: commentUser?.userName || '匿名用户',
-      userAvatar: getUserAvatar(commentUser),
-      replyUserName: replyUser?.userName || '',
+  return {
+    id: String(comment.id || ''),
+    postId: String(comment.postId || ''),
+    replyId,
+    content: String(comment.content || '').trim(),
+    createdAt: formatCommentDate(comment.createdAt),
+    userName: commentUser?.userName || '匿名用户',
+    userAvatar: getUserAvatar(commentUser),
+    replyUserName: replyUser?.userName || '',
   }
 }
 
@@ -467,6 +504,44 @@ const filteredPosts = computed(() => {
   if (activeTag.value === '全部') return lifePosts.value
   return lifePosts.value.filter((post) => post.tags.includes(activeTag.value))
 })
+
+const setFilterChipRef = (tag: string, el: HTMLButtonElement | null) => {
+  filterChipRefs.value = {
+    ...filterChipRefs.value,
+    [tag]: el,
+  }
+}
+
+const scrollActiveTagIntoView = () => {
+  const targetTag = activeTag.value
+  const targetElement = filterChipRefs.value[targetTag]
+
+  if (targetElement) {
+    targetElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    })
+    return
+  }
+
+  if (targetTag === '全部') {
+    filterChipRefs.value['全部']?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'start',
+    })
+  }
+}
+
+const handleSelectTag = async (tag: string) => {
+  const nextTag = String(tag || '').trim()
+  if (!nextTag) return
+
+  activeTag.value = nextTag
+  await nextTick()
+  scrollActiveTagIntoView()
+}
 
 const handlePageScroll = async () => {
   if (loading.value || loadingMorePosts.value || !hasMorePosts.value) return
@@ -518,8 +593,7 @@ const insertEmoji = async (postId: string, emoji: string) => {
 
   const selectionStart = textarea.selectionStart ?? currentValue.length
   const selectionEnd = textarea.selectionEnd ?? currentValue.length
-  const nextValue =
-    currentValue.slice(0, selectionStart) + emoji + currentValue.slice(selectionEnd)
+  const nextValue = currentValue.slice(0, selectionStart) + emoji + currentValue.slice(selectionEnd)
 
   commentDrafts.value = {
     ...commentDrafts.value,
@@ -534,8 +608,7 @@ const insertEmoji = async (postId: string, emoji: string) => {
 }
 
 const toggleReplyEmojiPanel = async (commentId: string) => {
-  activeReplyEmojiCommentId.value =
-    activeReplyEmojiCommentId.value === commentId ? null : commentId
+  activeReplyEmojiCommentId.value = activeReplyEmojiCommentId.value === commentId ? null : commentId
 
   await nextTick()
   replyInputRefs.value[commentId]?.focus()
@@ -556,8 +629,7 @@ const insertReplyEmoji = async (commentId: string, emoji: string) => {
 
   const selectionStart = textarea.selectionStart ?? currentValue.length
   const selectionEnd = textarea.selectionEnd ?? currentValue.length
-  const nextValue =
-    currentValue.slice(0, selectionStart) + emoji + currentValue.slice(selectionEnd)
+  const nextValue = currentValue.slice(0, selectionStart) + emoji + currentValue.slice(selectionEnd)
 
   replyDraftsByComment.value = {
     ...replyDraftsByComment.value,
@@ -597,7 +669,7 @@ const fetchPostsPublicData = async () => {
   }
 }
 
-const fetchLifePosts = async (append = false) => {
+const fetchLifePosts = async (append = false, pageSize = lifePostPageSize) => {
   if (append) {
     if (loadingMorePosts.value || !hasMorePosts.value) return
     loadingMorePosts.value = true
@@ -616,7 +688,7 @@ const fetchLifePosts = async (append = false) => {
       {
         pageRequest: {
           current: lifePostPage.value,
-          pageSize: lifePostPageSize,
+          pageSize,
         },
       },
       {
@@ -629,10 +701,13 @@ const fetchLifePosts = async (append = false) => {
       const total = Number(res.data.data?.total || 0)
 
       lifePosts.value = append ? [...lifePosts.value, ...records] : records
-      hasMorePosts.value = total > 0 ? lifePosts.value.length < total : records.length === lifePostPageSize
+      hasMorePosts.value =
+        total > 0 ? lifePosts.value.length < total : records.length === pageSize
 
       if (records.length > 0) {
-        lifePostPage.value += 1
+        lifePostPage.value = append
+          ? lifePostPage.value + 1
+          : Math.ceil(records.length / lifePostPageSize) + 1
       }
 
       return
@@ -653,6 +728,11 @@ const fetchLifePosts = async (append = false) => {
       loading.value = false
     }
   }
+}
+
+const refreshLifePostsForAuthChange = async () => {
+  const loadedCount = Math.max(lifePostPageSize, lifePosts.value.length || 0)
+  await fetchLifePosts(false, loadedCount)
 }
 
 const handleToggleLike = async (postId: string) => {
@@ -694,7 +774,7 @@ const fetchPostComments = async (postId: string, append = false) => {
       {
         postCommentQueryRequest: {
           postId: postId as never,
-          current: append ? (commentsPageByPost.value[postId] || 1) : 1,
+          current: append ? commentsPageByPost.value[postId] || 1 : 1,
           pageSize: 5,
           sortField: 'createdAt',
           sortOrder: 'ascend',
@@ -713,7 +793,9 @@ const fetchPostComments = async (postId: string, append = false) => {
 
     commentsByPost.value = {
       ...commentsByPost.value,
-      [postId]: append ? [...(commentsByPost.value[postId] || []), ...mappedRecords] : mappedRecords,
+      [postId]: append
+        ? [...(commentsByPost.value[postId] || []), ...mappedRecords]
+        : mappedRecords,
     }
     commentsLoaded.value = {
       ...commentsLoaded.value,
@@ -721,7 +803,7 @@ const fetchPostComments = async (postId: string, append = false) => {
     }
     commentsPageByPost.value = {
       ...commentsPageByPost.value,
-      [postId]: (append ? (commentsPageByPost.value[postId] || 1) : 1) + 1,
+      [postId]: (append ? commentsPageByPost.value[postId] || 1 : 1) + 1,
     }
     commentsHasMoreByPost.value = {
       ...commentsHasMoreByPost.value,
@@ -914,6 +996,25 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
   window.removeEventListener('scroll', handlePageScroll)
 })
+
+watch(tags, (nextTags) => {
+  if (!nextTags.includes(activeTag.value)) {
+    activeTag.value = '全部'
+  }
+})
+
+watch(activeTag, async () => {
+  await nextTick()
+  scrollActiveTagIntoView()
+})
+
+watch(
+  () => loginUserStore.loginUser.id,
+  async (current, previous) => {
+    if (current === previous) return
+    await refreshLifePostsForAuthChange()
+  },
+)
 </script>
 
 <style scoped>
@@ -926,8 +1027,9 @@ onBeforeUnmount(() => {
   padding-bottom: 24px;
 }
 
+/** 头部卡片 */
 .hero-card {
-  position: relative;
+  /* position: relative; */
   overflow: hidden;
   padding: 28px;
   border: 1px solid rgba(142, 170, 208, 0.28);
@@ -937,11 +1039,16 @@ onBeforeUnmount(() => {
     linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 255, 0.94));
   box-shadow: 0 22px 48px rgba(22, 55, 108, 0.12);
 }
-
+.hero-bg {
+  position: absolute;
+  max-width: 300px;
+  top: -126px;
+  z-index: 10;
+}
 .hero-card::after {
   content: '';
   position: absolute;
-  right: -80px;
+  left: 100px;
   top: -80px;
   width: 220px;
   height: 220px;
@@ -1015,11 +1122,27 @@ onBeforeUnmount(() => {
 
 .filter-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 132, 176, 0.35) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filter-bar::-webkit-scrollbar {
+  height: 6px;
+}
+
+.filter-bar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(103, 132, 176, 0.3);
 }
 
 .filter-chip {
+  flex: 0 0 auto;
   min-height: 42px;
   padding: 0 16px;
   border: 1px solid rgba(161, 182, 214, 0.28);
@@ -1028,6 +1151,7 @@ onBeforeUnmount(() => {
   color: #496585;
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     transform 0.22s ease,
@@ -1235,12 +1359,25 @@ onBeforeUnmount(() => {
 }
 
 .post-tag {
+  border: none;
   padding: 5px 12px;
   border-radius: 999px;
   background: rgba(70, 117, 205, 0.08);
   color: #436792;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.post-tag:hover {
+  transform: translateY(-1px);
+  background: rgba(70, 117, 205, 0.14);
+  color: #31578b;
 }
 
 .post-weather {
