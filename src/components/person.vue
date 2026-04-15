@@ -138,6 +138,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import myLogin from '@/components/AuthDialog.vue'
 import { login, logout, regist } from '@/api/userController'
+import { FRONT_AUTH_CHANGED_EVENT } from '@/constants/auth'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useSiteInfoStore } from '@/stores/siteInfo'
 
@@ -232,6 +233,7 @@ const handleLogin = async () => {
       loginUserInfo.username = ''
       loginUserInfo.password = ''
       loginUserStore.setLoginUser(loginUser)
+      window.dispatchEvent(new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'login' } }))
     }
   } finally {
     loginSubmitting.value = false
@@ -255,6 +257,7 @@ const handleLogout = async () => {
         loginUserStore.setLoginUser({
           userName: '未登录',
         })
+        window.dispatchEvent(new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'logout' } }))
         ElMessage.success('退出登录成功')
       }
     })

@@ -308,6 +308,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, type InputInstance } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { getPostCommentList, pushPostComment } from '@/api/componentController'
+import { FRONT_AUTH_CHANGED_EVENT } from '@/constants/auth'
 import { getFrontPostsList, getPostsPublicData, likePost } from '@/api/userPostsController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useSiteInfoStore } from '@/stores/siteInfo'
@@ -365,6 +366,7 @@ const replyEmojiWrapRefs = ref<Record<string, HTMLDivElement | null>>({})
 const filterChipRefs = ref<Record<string, HTMLButtonElement | null>>({})
 const activeEmojiPostId = ref<string | null>(null)
 const activeReplyEmojiCommentId = ref<string | null>(null)
+let lastWindowScrollTop = 0
 const emojiOptions = [
   '😀',
   '😁',
@@ -550,6 +552,13 @@ const handlePageScroll = async () => {
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0
   const fullHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0
 
+  if (scrollTop <= lastWindowScrollTop) {
+    lastWindowScrollTop = scrollTop
+    return
+  }
+
+  lastWindowScrollTop = scrollTop
+
   if (scrollTop + viewportHeight >= fullHeight - 220) {
     await fetchLifePosts(true)
   }
@@ -733,6 +742,10 @@ const fetchLifePosts = async (append = false, pageSize = lifePostPageSize) => {
 const refreshLifePostsForAuthChange = async () => {
   const loadedCount = Math.max(lifePostPageSize, lifePosts.value.length || 0)
   await fetchLifePosts(false, loadedCount)
+}
+
+const handleFrontAuthChanged = async () => {
+  await refreshLifePostsForAuthChange()
 }
 
 const handleToggleLike = async (postId: string) => {
@@ -987,14 +1000,17 @@ const handleSubmitReplyComment = async (postId: string, comment: PostCommentItem
 }
 
 onMounted(async () => {
+  lastWindowScrollTop = window.scrollY || document.documentElement.scrollTop || 0
   document.addEventListener('pointerdown', handleDocumentPointerDown)
   window.addEventListener('scroll', handlePageScroll, { passive: true })
+  window.addEventListener(FRONT_AUTH_CHANGED_EVENT, handleFrontAuthChanged)
   await fetchLifePosts()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
   window.removeEventListener('scroll', handlePageScroll)
+  window.removeEventListener(FRONT_AUTH_CHANGED_EVENT, handleFrontAuthChanged)
 })
 
 watch(tags, (nextTags) => {
@@ -1007,14 +1023,6 @@ watch(activeTag, async () => {
   await nextTick()
   scrollActiveTagIntoView()
 })
-
-watch(
-  () => loginUserStore.loginUser.id,
-  async (current, previous) => {
-    if (current === previous) return
-    await refreshLifePostsForAuthChange()
-  },
-)
 </script>
 
 <style scoped>

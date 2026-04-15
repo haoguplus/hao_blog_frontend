@@ -126,6 +126,7 @@ import { UComment, type CommentApi as UiCommentApi, type ConfigApi } from 'undra
 import defaultAvatar from '@/assets/image/bg.jpg'
 import AuthDialog from '@/components/AuthDialog.vue'
 import { getArticleComment, likeComment, pushComment } from '@/api/componentController'
+import { FRONT_AUTH_CHANGED_EVENT } from '@/constants/auth'
 import { login, regist } from '@/api/userController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useSiteInfoStore } from '@/stores/siteInfo'
@@ -455,6 +456,7 @@ const handleLogin = async () => {
     const res = await login(loginForm)
     if (res.data.code === 0 && res.data.data) {
       loginUserStore.setLoginUser(res.data.data)
+      window.dispatchEvent(new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'login' } }))
       resetLoginForm()
       isAuthDialogVisible.value = false
       ElMessage.success('登录成功')
