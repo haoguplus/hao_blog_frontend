@@ -507,11 +507,22 @@ const filteredPosts = computed(() => {
   return lifePosts.value.filter((post) => post.tags.includes(activeTag.value))
 })
 
-const setFilterChipRef = (tag: string, el: HTMLButtonElement | null) => {
-  filterChipRefs.value = {
-    ...filterChipRefs.value,
-    [tag]: el,
+// Function refs run during patch; avoid replacing reactive records here or Vue can re-render endlessly.
+const updateRefRecord = <T extends object>(source: Record<string, T | null>, key: string, el: T | null) => {
+  if (el) {
+    if (source[key] !== el) {
+      source[key] = el
+    }
+    return
   }
+
+  if (key in source) {
+    delete source[key]
+  }
+}
+
+const setFilterChipRef = (tag: string, el: HTMLButtonElement | null) => {
+  updateRefRecord(filterChipRefs.value, tag, el)
 }
 
 const scrollActiveTagIntoView = () => {
@@ -565,19 +576,19 @@ const handlePageScroll = async () => {
 }
 
 const setCommentInputRef = (postId: string, el: InputInstance | null) => {
-  commentInputRefs.value[postId] = el
+  updateRefRecord(commentInputRefs.value, postId, el)
 }
 
 const setReplyInputRef = (commentId: string, el: InputInstance | null) => {
-  replyInputRefs.value[commentId] = el
+  updateRefRecord(replyInputRefs.value, commentId, el)
 }
 
 const setCommentEmojiWrapRef = (postId: string, el: HTMLDivElement | null) => {
-  commentEmojiWrapRefs.value[postId] = el
+  updateRefRecord(commentEmojiWrapRefs.value, postId, el)
 }
 
 const setReplyEmojiWrapRef = (commentId: string, el: HTMLDivElement | null) => {
-  replyEmojiWrapRefs.value[commentId] = el
+  updateRefRecord(replyEmojiWrapRefs.value, commentId, el)
 }
 
 const toggleEmojiPanel = async (postId: string) => {
