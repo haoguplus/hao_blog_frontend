@@ -23,7 +23,7 @@
         </div>
       </section>
 
-      <section class="login-panel">
+      <section class="login-panel" v-if="!smsAndPass">
         <div class="panel-header">
           <div class="panel-kicker">Sign In</div>
           <h2>管理员登录</h2>
@@ -58,10 +58,66 @@
             />
           </el-form-item>
 
-          <div class="action-row">
+          <!-- <div class="action-row">
             <el-checkbox v-model="rememberMe">记住本次登录状态</el-checkbox>
             <span class="action-hint">建议使用管理员账号登录</span>
-          </div>
+          </div> -->
+
+          <el-button
+            type="primary"
+            class="submit-button"
+            :loading="submitting"
+            @click="handleSubmit"
+            true
+          >
+            登录后台
+          </el-button>
+        </el-form>
+
+        <div class="panel-footer">
+          <span>点击进入</span>
+          <button type="button" class="back-link" @click="smsAndPass = true">
+            手机短信验证码登录
+          </button>
+        </div>
+      </section>
+
+      <section class="login-panel" v-else>
+        <div class="panel-header">
+          <div class="panel-kicker">Sign In</div>
+          <h2>管理员登录</h2>
+          <p>手机验证码登录，登录后进入后台工作台。</p>
+        </div>
+
+        <el-form :model="formState" class="login-form" label-position="top" @submit.prevent>
+          <el-form-item label="手机号" prop="username">
+            <div class="phoneAndCode">
+              <el-input
+                v-model="formState.username"
+                placeholder="请输入手机号"
+                size="large"
+                clearable
+              />
+              <div class="code" @click="sendSms">
+                {{ sendText > 0 ? sendText + '秒后重试' : '发送验证码' }}
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="验证码" prop="code">
+            <el-input
+              v-model="formState.code"
+              type="text"
+              placeholder="请输入验证码"
+              size="large"
+              @keyup.enter="handleSubmit"
+            />
+          </el-form-item>
+
+          <!-- <div class="action-row">
+            <el-checkbox v-model="rememberMe">记住本次登录状态</el-checkbox>
+            <span class="action-hint">建议使用管理员账号登录</span>
+          </div> -->
 
           <el-button
             type="primary"
@@ -73,9 +129,13 @@
           </el-button>
         </el-form>
 
-        <div class="panel-footer">
+        <!-- <div class="panel-footer">
           <span>返回前台站点</span>
           <button type="button" class="back-link" @click="router.push('/')">前往首页</button>
+        </div> -->
+        <div class="panel-footer">
+          <span>点击进入</span>
+          <button type="button" class="back-link" @click="smsAndPass = false">账号密码登录</button>
         </div>
       </section>
     </div>
@@ -83,10 +143,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { adminLogin } from '@/api/userController'
+import { adminLogin, sendSms as pushSms } from '@/api/userController'
 import { useLoginUserStore } from '@/stores/loginUser'
 
 const router = useRouter()
@@ -99,7 +159,71 @@ const rememberMe = ref(true)
 const formState = reactive<API.UserLoginRequest>({
   username: '',
   password: '',
+  code: '',
+  type: 0,
 })
+/**
+ * 发送验证码
+ *
+ */
+const isSendLoding = ref(false)
+const sendText = ref(0)
+const PHONE_KEY = 'sms_last_send_time1'
+
+onMounted(() => {
+  const lastTime = localStorage.getItem(PHONE_KEY)
+  if (lastTime) {
+    const now = Date.now()
+    const diff = 60000 - (now - parseInt(lastTime))
+    if (diff > 0) {
+      sendText.value = Math.floor(diff / 1000)
+      startTimer()
+    }
+  }
+})
+const sendSms = async () => {
+  if (isSendLoding.value) return
+  if (!formState.username) {
+    ElMessage.error('请输入手机号')
+    return
+  }
+  //匹配正则
+  const usernameRegex = /^1[3-9]\d{9}$/
+  if (!usernameRegex.test(formState.username)) {
+    ElMessage.error('请输入正确的手机号码')
+    return
+  }
+  // 记录发送时间
+  localStorage.setItem(PHONE_KEY, Date.now().toString())
+  sendText.value = 60
+  startTimer()
+  //请求代码
+  const params: API.UserPhoneRequest = {
+    phone: formState.username,
+  }
+  const res = await pushSms(params)
+  if (res.data.code === 0) {
+    ElMessage.success('发送验证码成功')
+  }
+}
+
+// 定时器
+function startTimer() {
+  isSendLoding.value = true
+  const timer = setInterval(() => {
+    sendText.value--
+    if (sendText.value <= 0) {
+      clearInterval(timer)
+      isSendLoding.value = false
+      localStorage.removeItem(PHONE_KEY)
+    }
+  }, 1000)
+}
+
+/**
+ * 登录
+ */
+const smsAndPass = ref(true)
 
 const validateUsername = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (!value) {
@@ -135,28 +259,67 @@ const formRules: FormRules<API.UserLoginRequest> = {
 }
 
 const handleSubmit = async () => {
-  if (!formRef.value) {
-    return
-  }
+  if (submitting.value) return
 
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) {
-    return
-  }
-
-  submitting.value = true
-
-  try {
-    const res = await adminLogin(formState)
-    if (res.data.code === 0 && res.data.data) {
-      loginUserStore.setLoginUser(res.data.data)
-      ElMessage.success('登录成功，正在进入后台')
-      router.push('/admin')
+  formState.type = smsAndPass.value ? 0 : 1
+  if (formState.type == 1) {
+    //账号密码登录
+    if (!formRef.value) {
       return
     }
-  } catch (error) {
-  } finally {
-    submitting.value = false
+
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid) {
+      return
+    }
+
+    submitting.value = true
+
+    try {
+      const res = await adminLogin(formState)
+      if (res.data.code === 0 && res.data.data) {
+        loginUserStore.setLoginUser(res.data.data)
+        ElMessage.success('登录成功，正在进入后台')
+        router.push('/admin')
+        return
+      }
+    } catch (error) {
+    } finally {
+      submitting.value = false
+    }
+  } else if (formState.type == 0) {
+    //短信验证码登录
+    //手机号登录
+    if (!formState.username) {
+      ElMessage.error('请输入手机号')
+      return
+    }
+    //判断手机号格式和验证码是否填写
+    //匹配正则
+    const usernameRegex = /^1[3-9]\d{9}$/
+    if (!usernameRegex.test(formState.username)) {
+      ElMessage.error('请输入正确的手机号码')
+      return
+    }
+    //验证码
+    if (!formState.code) {
+      ElMessage.error('请输入验证码')
+      return
+    }
+
+    submitting.value = true
+    try {
+      const res = await adminLogin(formState)
+      if (res.data.code === 0 && res.data.data) {
+        loginUserStore.setLoginUser(res.data.data)
+        ElMessage.success('登录成功，正在进入后台')
+        router.push('/admin')
+        return
+      }
+    } catch (error) {
+    } finally {
+      submitting.value = false
+    }
   }
 }
 </script>
@@ -303,9 +466,33 @@ const handleSubmit = async () => {
   font-size: 14px;
   line-height: 1.75;
 }
-
+/**登录 */
 .login-form {
   margin-top: 28px;
+}
+
+.phoneAndCode {
+  position: relative;
+  width: 100%;
+}
+.phoneAndCode .code {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  padding: 10px;
+  color: white;
+  border-radius: 13px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #5381e5;
+  cursor: pointer;
+  font-size: 12px;
+  width: 90px;
+}
+.phoneAndCode .code:hover {
+  background-color: #3065d8;
 }
 
 .login-form :deep(.el-form-item) {

@@ -36,23 +36,53 @@
     <myLogin v-model:visible="isOpenLogin">
       <template #header>
         <div class="dialog-hero">
-          <div class="dialog-kicker">{{ loginOrRegister ? 'Welcome back' : 'Create account' }}</div>
-          <div class="model-title">{{ loginOrRegister ? '登录你的账号' : '创建新的账号' }}</div>
+          <div class="dialog-kicker">Welcome back</div>
+          <div class="model-title">{{ smsOrPassword ? '手机验证码登录' : '账号密码登录' }}</div>
           <p class="dialog-subtitle">
-            {{
-              loginOrRegister
-                ? '继续访问你的博客空间、个人资料和互动内容。'
-                : '花一分钟完成注册，马上开始你的博客之旅。'
-            }}
+            {{ smsOrPassword ? '首次登录自动注册' : '欢迎来到旧故里的时光' }}
           </p>
         </div>
       </template>
 
       <template #body>
-        <div v-if="loginOrRegister" class="model-body-content">
+        <div v-if="smsOrPassword" class="model-body-content">
+          <div class="input-group sms">
+            <div class="field-label">手机号</div>
+            <div class="phoneAndCode">
+              <el-input v-model="loginUserInfo.username" placeholder="请输入手机号" />
+              <div class="code" @click="sendSms">
+                {{ sendText > 0 ? sendText + '秒后重试' : '发送验证码' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <div class="field-label">验证码</div>
+            <el-input v-model="loginUserInfo.code" type="text" placeholder="请输入验证码" />
+          </div>
+
+          <div class="btn-group">
+            <el-button
+              type="primary"
+              :loading="loginSubmitting"
+              :disabled="loginSubmitting"
+              @click="handleLogin"
+              >登录</el-button
+            >
+          </div>
+
+          <div class="switch-tip">
+            手机验证码登录
+            <button class="switch-action" type="button" @click="smsOrPassword = false">
+              账号密码登录
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="model-body-content">
           <div class="input-group">
             <div class="field-label">用户名</div>
-            <el-input v-model="loginUserInfo.username" placeholder="请输入用户名" />
+            <el-input v-model="loginUserInfo.username" placeholder="请输入用户名或手机号" />
           </div>
 
           <div class="input-group">
@@ -68,63 +98,58 @@
           <div class="btn-group">
             <el-button
               type="primary"
+              @click="handleLogin"
               :loading="loginSubmitting"
               :disabled="loginSubmitting"
-              @click="handleLogin"
               >登录</el-button
             >
           </div>
 
           <div class="switch-tip">
-            还没有账号？
-            <button class="switch-action" type="button" @click="loginOrRegister = false">
-              立即注册
+            账号密码登录
+            <button class="switch-action" type="button" @click="smsOrPassword = true">
+              手机验证码登录
             </button>
           </div>
         </div>
+      </template>
+    </myLogin>
 
-        <div v-else class="model-body-content">
-          <div class="input-group">
-            <div class="field-label">用户名</div>
-            <el-input v-model="registerUserInfo.username" placeholder="请输入用户名" />
-          </div>
-
-          <div class="input-group">
-            <div class="field-label">密码</div>
-            <el-input
-              v-model="registerUserInfo.password"
-              type="password"
-              show-password
-              placeholder="请输入密码"
-            />
-          </div>
-
-          <div class="input-group">
-            <div class="field-label">确认密码</div>
-            <el-input
-              v-model="registerUserInfo.checkPassword"
-              type="password"
-              show-password
-              placeholder="请再次输入密码"
-            />
-          </div>
-
-          <div class="btn-group">
-            <el-button
-              type="primary"
-              :loading="registerSubmitting"
-              :disabled="registerSubmitting"
-              @click="handleRegister"
-              >注册</el-button
-            >
-          </div>
-
-          <div class="switch-tip">
-            已有账号？
-            <button class="switch-action" type="button" @click="loginOrRegister = true">
-              去登录
-            </button>
-          </div>
+    <myLogin v-model:visible="isInitPass">
+      <template #header>
+        <div class="dialog-hero">
+          <div class="dialog-kicker">未初始化密码</div>
+          <div class="model-title">初始化密码</div>
+          <!-- <p class="dialog-subtitle">欢迎来到我的博客</p> -->
+        </div>
+      </template>
+      <template #body>
+        <div class="input-group">
+          <div class="field-label">密码</div>
+          <el-input
+            v-model="initPassObj.password"
+            type="password"
+            show-password
+            placeholder="请输入密码"
+          />
+        </div>
+        <div class="input-group">
+          <div class="field-label">再次输入密码</div>
+          <el-input
+            v-model="initPassObj.checkPassword"
+            type="password"
+            show-password
+            placeholder="请输入密码"
+          />
+        </div>
+        <div class="btn-group">
+          <el-button
+            type="primary"
+            @click="savePass"
+            :loading="sendPassloading"
+            :disabled="sendPassloading"
+            >修改密码</el-button
+          >
         </div>
       </template>
     </myLogin>
@@ -132,12 +157,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { UserFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import myLogin from '@/components/AuthDialog.vue'
-import { login, logout, regist } from '@/api/userController'
+import { login, logout, sendSms as pushSms, writePass } from '@/api/userController'
 import { FRONT_AUTH_CHANGED_EVENT } from '@/constants/auth'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useSiteInfoStore } from '@/stores/siteInfo'
@@ -145,98 +170,203 @@ import { useSiteInfoStore } from '@/stores/siteInfo'
 const loginUserStore = useLoginUserStore()
 const siteInfo = useSiteInfoStore().siteInfo
 const router = useRouter()
+/**
+ * 初始化密码
+ */
+const isInitPass = ref(false)
+const sendPassloading = ref(false)
+onMounted(() => {
+  initPass()
+})
 
-const isOpenLogin = ref(false)
-const loginOrRegister = ref(true)
-const loginSubmitting = ref(false)
-const registerSubmitting = ref(false)
+//初始化逻辑
+const initPass = () => {
+  //获取用户
+  let loginuser = loginUserStore.loginUser
+  let isInit = loginuser.init
+  if (!isInit) return
 
-const registerUserInfo = reactive<API.UserRegisterRequest>({
+  isInitPass.value = true
+}
+
+const initPassObj = reactive<API.UserRegisterRequest>({
   username: '',
   password: '',
   checkPassword: '',
 })
 
+const savePass = async () => {
+  if (sendPassloading.value) return
+  if (!initPassObj.password) {
+    ElMessage.error('密码不能为空')
+    return
+  }
+  if (initPassObj.password.length < 6) {
+    ElMessage.error('密码不能小于6位')
+    return
+  }
+  if (initPassObj.password != initPassObj.checkPassword) {
+    ElMessage.error('两次密码输入不一致')
+    return
+  }
+  sendPassloading.value = true
+  let res = await writePass(initPassObj)
+  if (res.data.code === 0) {
+    ElMessage.success('修改密码成功')
+    isInitPass.value = false
+  }
+  sendPassloading.value = false
+}
+
+/**
+ * 发送验证码
+ */
+const isSendLoding = ref(false)
+const sendText = ref(0)
+const PHONE_KEY = 'sms_last_send_time'
+onMounted(() => {
+  const lastTime = localStorage.getItem(PHONE_KEY)
+  if (lastTime) {
+    const now = Date.now()
+    const diff = 60000 - (now - parseInt(lastTime))
+    if (diff > 0) {
+      sendText.value = Math.floor(diff / 1000)
+      startTimer()
+    }
+  }
+})
+
+const sendSms = async () => {
+  if (isSendLoding.value) return
+  if (!loginUserInfo.username) {
+    ElMessage.error('请输入手机号')
+    return
+  }
+  //匹配正则
+  const usernameRegex = /^1[3-9]\d{9}$/
+  if (!usernameRegex.test(loginUserInfo.username)) {
+    ElMessage.error('请输入正确的手机号码')
+    return
+  }
+  // 记录发送时间
+  localStorage.setItem(PHONE_KEY, Date.now().toString())
+  sendText.value = 60
+  startTimer()
+  //请求代码
+  const params: API.UserPhoneRequest = {
+    phone: loginUserInfo.username,
+  }
+  const res = await pushSms(params)
+  if (res.data.code === 0) {
+    ElMessage.success('发送验证码成功')
+  }
+}
+// 定时器
+function startTimer() {
+  isSendLoding.value = true
+  const timer = setInterval(() => {
+    sendText.value--
+    if (sendText.value <= 0) {
+      clearInterval(timer)
+      isSendLoding.value = false
+      localStorage.removeItem(PHONE_KEY)
+    }
+  }, 1000)
+}
+/**
+ * 登录
+ */
+
+const isOpenLogin = ref(false)
+const smsOrPassword = ref(true)
+const loginSubmitting = ref(false)
+
 const loginUserInfo = reactive<API.UserLoginRequest>({
   username: '',
   password: '',
+  code: '',
+  type: 0,
 })
-
-const handleRegister = async () => {
-  if (registerSubmitting.value) return
-
-  if (!registerUserInfo.username || !registerUserInfo.password || !registerUserInfo.checkPassword) {
-    ElMessage.error('请填写完整的注册信息')
-    return
-  }
-
-  const usernameRegex = /^[a-zA-Z0-9]{6,}$/
-  if (!usernameRegex.test(registerUserInfo.username)) {
-    ElMessage.error('用户名至少 6 位，且只能包含字母和数字')
-    return
-  }
-
-  if (registerUserInfo.password.length < 6) {
-    ElMessage.error('密码至少需要 6 位')
-    return
-  }
-
-  if (registerUserInfo.password !== registerUserInfo.checkPassword) {
-    ElMessage.error('两次输入的密码不一致')
-    return
-  }
-
-  registerSubmitting.value = true
-
-  try {
-    const res = await regist(registerUserInfo)
-    if (res.data.code === 0 && res.data.data) {
-      ElMessage.success('注册成功')
-      loginOrRegister.value = true
-      registerUserInfo.username = ''
-      registerUserInfo.password = ''
-      registerUserInfo.checkPassword = ''
-    }
-  } finally {
-    registerSubmitting.value = false
-  }
-}
-
 const handleLogin = async () => {
   if (loginSubmitting.value) return
+  loginUserInfo.type = smsOrPassword.value ? 0 : 1
 
-  if (!loginUserInfo.username || !loginUserInfo.password) {
-    ElMessage.error('请填写完整的登录信息')
-    return
-  }
-
-  const usernameRegex = /^[a-zA-Z0-9]{6,}$/
-  if (!usernameRegex.test(loginUserInfo.username)) {
-    ElMessage.error('用户名至少 6 位，且只能包含字母和数字')
-    return
-  }
-
-  if (loginUserInfo.password.length < 6) {
-    ElMessage.error('密码至少需要 6 位')
-    return
-  }
-
-  loginSubmitting.value = true
-
-  try {
-    const res = await login(loginUserInfo)
-    const loginUser = res.data.data
-
-    if (res.data.code === 0 && loginUser) {
-      ElMessage.success('登录成功')
-      isOpenLogin.value = false
-      loginUserInfo.username = ''
-      loginUserInfo.password = ''
-      loginUserStore.setLoginUser(loginUser)
-      window.dispatchEvent(new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'login' } }))
+  if (loginUserInfo.type == 0) {
+    //手机号登录
+    if (!loginUserInfo.username) {
+      ElMessage.error('请输入手机号')
+      return
     }
-  } finally {
-    loginSubmitting.value = false
+    //判断手机号格式和验证码是否填写
+    //匹配正则
+    const usernameRegex = /^1[3-9]\d{9}$/
+    if (!usernameRegex.test(loginUserInfo.username)) {
+      ElMessage.error('请输入正确的手机号码')
+      return
+    }
+    //验证码
+    if (!loginUserInfo.code) {
+      ElMessage.error('请输入验证码')
+      return
+    }
+    //处理登录逻辑
+    loginSubmitting.value = true
+
+    try {
+      const res = await login(loginUserInfo)
+      const loginUser = res.data.data
+
+      if (res.data.code === 0 && loginUser) {
+        ElMessage.success('登录成功')
+        isOpenLogin.value = false
+        loginUserInfo.username = ''
+        loginUserInfo.password = ''
+        loginUserStore.setLoginUser(loginUser)
+        initPass()
+        window.dispatchEvent(
+          new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'login' } }),
+        )
+      }
+    } finally {
+      loginSubmitting.value = false
+    }
+  } else if (loginUserInfo.type == 1) {
+    //账号密码登录
+    if (!loginUserInfo.username || !loginUserInfo.password) {
+      ElMessage.error('请填写完整的登录信息')
+      return
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9]{6,}$/
+    if (!usernameRegex.test(loginUserInfo.username)) {
+      ElMessage.error('用户名至少 6 位，且只能包含字母和数字')
+      return
+    }
+
+    if (loginUserInfo.password.length < 6) {
+      ElMessage.error('密码至少需要 6 位')
+      return
+    }
+
+    loginSubmitting.value = true
+
+    try {
+      const res = await login(loginUserInfo)
+      const loginUser = res.data.data
+
+      if (res.data.code === 0 && loginUser) {
+        ElMessage.success('登录成功')
+        isOpenLogin.value = false
+        loginUserInfo.username = ''
+        loginUserInfo.password = ''
+        loginUserStore.setLoginUser(loginUser)
+        window.dispatchEvent(
+          new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'login' } }),
+        )
+      }
+    } finally {
+      loginSubmitting.value = false
+    }
   }
 }
 
@@ -257,7 +387,9 @@ const handleLogout = async () => {
         loginUserStore.setLoginUser({
           userName: '未登录',
         })
-        window.dispatchEvent(new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'logout' } }))
+        window.dispatchEvent(
+          new CustomEvent(FRONT_AUTH_CHANGED_EVENT, { detail: { action: 'logout' } }),
+        )
         ElMessage.success('退出登录成功')
       }
     })
@@ -313,14 +445,43 @@ const handleLogout = async () => {
   font-size: 14px;
   line-height: 1.7;
 }
-
+/* 手机验证码 */
 .model-body-content {
   position: relative;
+}
+.phoneAndCode {
+  position: relative;
+}
+.phoneAndCode .code {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  padding: 10px;
+  color: white;
+  border-radius: 13px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #5381e5;
+  cursor: pointer;
+  font-size: 12px;
+  width: 90px;
+}
+.phoneAndCode .code:hover {
+  background-color: #3065d8;
+}
+
+.sms .el-input:deep(.el-input__wrapper) input {
+  padding-right: 100px;
 }
 
 .input-group {
   margin-bottom: 18px;
 }
+/* .input-group.sms {
+  margin-bottom: 78px;
+} */
 
 .field-label {
   margin-bottom: 8px;

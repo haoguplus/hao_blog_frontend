@@ -30,7 +30,7 @@ export async function adminLogin(body: API.UserLoginRequest, options?: { [key: s
 export async function deleteUserVoById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.deleteUserVoByIdParams,
-  options?: { [key: string]: any }
+  options?: { [key: string]: any },
 ) {
   return request<API.BaseResponseBoolean>('/user/deleteUserById', {
     method: 'POST',
@@ -64,7 +64,7 @@ export async function getLoginUser(options?: { [key: string]: any }) {
 /** 此处后端没有提供注释 POST /user/getUserListByPage */
 export async function getUserListByPage(
   body: API.UserQueryRequest,
-  options?: { [key: string]: any }
+  options?: { [key: string]: any },
 ) {
   return request<API.BaseResponsePageLoginUserVo>('/user/getUserListByPage', {
     method: 'POST',
@@ -80,7 +80,7 @@ export async function getUserListByPage(
 export async function getUserVoById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getUserVoByIdParams,
-  options?: { [key: string]: any }
+  options?: { [key: string]: any },
 ) {
   return request<API.BaseResponseLoginUserVo>('/user/getUserVoById', {
     method: 'GET',
@@ -94,6 +94,31 @@ export async function getUserVoById(
 /** 此处后端没有提供注释 POST /user/login */
 export async function login(body: API.UserLoginRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseLoginUserVo>('/user/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+/**
+ * 写入密码
+ */
+export async function writePass(body: API.UserRegisterRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseBoolean>('/user/writePassword', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 发送验证码 */
+export async function sendSms(body: API.UserPhoneRequest, options?: { [key: string]: any }) {
+  return request<API.BaseResponseBoolean>('/user/sendSms', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

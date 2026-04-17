@@ -123,6 +123,11 @@
             <p class="info-value">@{{ loginUserStore.loginUser.userAccount || '未设置' }}</p>
           </div>
 
+          <div class="info-item">
+            <span class="info-label">手机号</span>
+            <p class="info-value">{{ loginUserStore.loginUser.phone || '未设置' }}</p>
+          </div>
+
           <div class="info-item info-item-large">
             <span class="info-label">个人简介</span>
             <p class="info-value">

@@ -410,6 +410,8 @@ declare namespace API {
     userRole?: string
     shareCode?: string
     inviteUser?: number
+    init?: boolean
+    phone?: string
     editTime?: string
     createTime?: string
   }
@@ -649,6 +651,12 @@ declare namespace API {
   type UserLoginRequest = {
     username?: string
     password?: string
+    type?: int
+    code?: string
+  }
+
+  type UserPhoneRequest = {
+    phone?: string
   }
 
   type UserPostsVo = {
