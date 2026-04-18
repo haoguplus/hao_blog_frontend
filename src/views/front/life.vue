@@ -52,17 +52,31 @@
           <p class="post-text">{{ post.content }}</p>
 
           <div
-            v-if="post.images.length"
+            v-if="post.mediaList.length"
             class="photo-grid"
-            :class="`photo-grid-${Math.min(post.images.length, 9)}`"
+            :class="`photo-grid-${Math.min(post.mediaList.length, 9)}`"
           >
-            <div v-for="image in post.images" :key="image" class="photo-item">
+            <div
+              v-for="media in post.mediaList"
+              :key="media.url"
+              class="photo-item"
+              :class="`photo-item-${media.type}`"
+            >
               <el-image
-                :src="image"
-                :preview-src-list="post.images"
+                v-if="media.type === 'image'"
+                :src="media.url"
+                :preview-src-list="post.imagePreviewList"
                 fit="cover"
                 preview-teleported
                 class="photo-preview"
+              />
+              <video
+                v-else
+                :src="media.url"
+                class="photo-video"
+                controls
+                playsinline
+                preload="metadata"
               />
             </div>
           </div>
@@ -312,6 +326,7 @@ import { FRONT_AUTH_CHANGED_EVENT } from '@/constants/auth'
 import { getFrontPostsList, getPostsPublicData, likePost } from '@/api/userPostsController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useSiteInfoStore } from '@/stores/siteInfo'
+import { getPostMediaType, normalizePostMediaUrl, type PostMediaType } from '@/utils/postMedia'
 
 type LifePost = {
   id: string
@@ -320,7 +335,8 @@ type LifePost = {
   month: string
   content: string
   tags: string[]
-  images: string[]
+  mediaList: Array<{ url: string; type: PostMediaType }>
+  imagePreviewList: string[]
   moodLabel: string
   postTypeLabel: string
   isLike: boolean
@@ -396,18 +412,6 @@ const mapLabelByValue = (source?: Record<string, any>) =>
 const moodMap = computed(() => mapLabelByValue(postsPublicData.value.mood))
 const postTypeMap = computed(() => mapLabelByValue(postsPublicData.value.postType))
 
-const normalizeImage = (value?: string) => {
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
-
-  const baseUrl = String(siteInfo.imageUrl || '').trim()
-  if (!baseUrl) return value
-
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const normalizedPath = value.startsWith('/') ? value : `/${value}`
-  return `${normalizedBase}${normalizedPath}`
-}
-
 const formatDate = (value?: string) => {
   if (!value) return ''
   return new Date(value).toLocaleString('zh-CN', {
@@ -454,21 +458,36 @@ const formatMonth = (value?: string) => {
   return new Date(value).toLocaleString('en-US', { month: 'short' })
 }
 
-const mapLifePost = (post: API.UserPostsVo): LifePost => ({
-  id: String(post.id || ''),
-  date: formatDate(post.createdAt),
-  day: post.createdAt ? new Date(post.createdAt).toLocaleString('zh-CN', { day: '2-digit' }) : '--',
-  month: formatMonth(post.createdAt),
-  content: String(post.content || '').trim(),
-  tags: post.tags || [],
-  images: (post.imageList || []).map((image) => normalizeImage(image)).filter(Boolean),
-  moodLabel: moodMap.value.get(Number(post.mood)) || '',
-  postTypeLabel: postTypeMap.value.get(Number(post.postType)) || '',
-  isLike: Boolean(post.isLike),
-  likeCount: Number(post.likeCount || 0),
-  commentCount: Number(post.commentCount || 0),
-  isTop: post.isTop === 1,
-})
+const mapLifePost = (post: API.UserPostsVo): LifePost => {
+  const mediaList = (post.imageList || [])
+    .map((media) => {
+      const normalizedUrl = normalizePostMediaUrl(media, siteInfo.imageUrl)
+      if (!normalizedUrl) return undefined
+
+      return {
+        url: normalizedUrl,
+        type: getPostMediaType(media),
+      }
+    })
+    .filter((media): media is { url: string; type: PostMediaType } => Boolean(media?.url))
+
+  return {
+    id: String(post.id || ''),
+    date: formatDate(post.createdAt),
+    day: post.createdAt ? new Date(post.createdAt).toLocaleString('zh-CN', { day: '2-digit' }) : '--',
+    month: formatMonth(post.createdAt),
+    content: String(post.content || '').trim(),
+    tags: post.tags || [],
+    mediaList,
+    imagePreviewList: mediaList.filter((media) => media.type === 'image').map((media) => media.url),
+    moodLabel: moodMap.value.get(Number(post.mood)) || '',
+    postTypeLabel: postTypeMap.value.get(Number(post.postType)) || '',
+    isLike: Boolean(post.isLike),
+    likeCount: Number(post.likeCount || 0),
+    commentCount: Number(post.commentCount || 0),
+    isTop: post.isTop === 1,
+  }
+}
 
 const mapPostComment = (
   comment: API.PostCommentVo,
@@ -1321,7 +1340,8 @@ watch(activeTag, async () => {
   aspect-ratio: 4 / 3;
 }
 
-.photo-item img {
+.photo-item img,
+.photo-item video {
   display: block;
   width: 100%;
   height: 100%;
@@ -1329,7 +1349,7 @@ watch(activeTag, async () => {
   transition: transform 0.3s ease;
 }
 
-.photo-item:hover :deep(img) {
+.photo-item-image:hover :deep(img) {
   transform: scale(1.04);
 }
 
@@ -1350,6 +1370,11 @@ watch(activeTag, async () => {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+}
+
+.photo-video {
+  border-radius: inherit;
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .post-footer {

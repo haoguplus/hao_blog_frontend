@@ -69,6 +69,12 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="手机号" width="160">
+          <template #default="{ row }">
+            {{ row.phone || '未绑定' }}
+          </template>
+        </el-table-column>
+
         <el-table-column label="角色" width="120">
           <template #default="{ row }">
             <el-tag :type="getRoleType(row.userRole || 'user')" effect="light" round>

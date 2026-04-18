@@ -67,19 +67,34 @@
 
             <el-form-item label="说说类型">
               <el-select v-model="queryForm.postType" clearable placeholder="全部类型">
-                <el-option v-for="item in postTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-option
+                  v-for="item in postTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
 
             <el-form-item label="心情值">
               <el-select v-model="queryForm.mood" clearable placeholder="全部心情">
-                <el-option v-for="item in moodOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-option
+                  v-for="item in moodOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
 
             <el-form-item label="可见性">
               <el-select v-model="queryForm.privacy" clearable placeholder="全部可见性">
-                <el-option v-for="item in privacyOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-option
+                  v-for="item in privacyOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </div>
@@ -146,16 +161,32 @@
           <template #default="{ row }">
             <div class="post-content-cell">
               <div class="post-content">{{ row.content || '暂无内容' }}</div>
-              <div v-if="row.imageList?.length" class="image-row">
-                <el-image
-                  v-for="image in row.imageList"
-                  :key="image"
-                  :src="normalizeImage(image)"
-                  fit="cover"
-                  class="post-image"
-                  :preview-src-list="row.imageList.map(normalizeImage)"
-                  preview-teleported
-                />
+              <div v-if="row.imageList?.length" class="media-row">
+                <template v-for="media in row.imageList" :key="media">
+                  <el-image
+                    v-if="getMediaType(media) === 'image'"
+                    :src="normalizeMedia(media)"
+                    fit="cover"
+                    class="post-media post-image"
+                    :preview-src-list="getImagePreviewList(row.imageList)"
+                    preview-teleported
+                  />
+                  <button
+                    v-else
+                    type="button"
+                    class="post-video-card"
+                    @click="openPreviewByUrl(media)"
+                  >
+                    <video
+                      :src="normalizeMedia(media)"
+                      class="post-video"
+                      muted
+                      playsinline
+                      preload="metadata"
+                    />
+                    <span class="post-video-badge">视频</span>
+                  </button>
+                </template>
               </div>
             </div>
           </template>
@@ -172,13 +203,7 @@
                 </el-tag>
               </div>
               <div class="tag-list">
-                <span
-                  v-for="tag in row.tags || []"
-                  :key="tag"
-                  class="meta-tag"
-                >
-                  #{{ tag }}
-                </span>
+                <span v-for="tag in row.tags || []" :key="tag" class="meta-tag"> #{{ tag }} </span>
                 <span v-if="!(row.tags || []).length" class="meta-empty">暂无标签</span>
               </div>
               <div class="meta-row">
@@ -258,19 +283,34 @@
         <div class="form-grid">
           <el-form-item label="说说类型">
             <el-select v-model="postForm.postType" placeholder="请选择类型">
-              <el-option v-for="item in postTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              <el-option
+                v-for="item in postTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
 
           <el-form-item label="心情值">
             <el-select v-model="postForm.mood" placeholder="请选择心情">
-              <el-option v-for="item in moodOptions" :key="item.value" :label="item.label" :value="item.value" />
+              <el-option
+                v-for="item in moodOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
 
           <el-form-item label="可见性">
             <el-select v-model="postForm.privacy" placeholder="请选择可见性">
-              <el-option v-for="item in privacyOptions" :key="item.value" :label="item.label" :value="item.value" />
+              <el-option
+                v-for="item in privacyOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
 
@@ -287,21 +327,71 @@
           <div class="field-tip">提交时会自动拆分成标签数组。</div>
         </el-form-item>
 
-        <el-form-item label="图片上传">
+        <el-form-item label="媒体上传">
           <el-upload
             action="/api/posts/uploadPicture"
             list-type="picture-card"
-            accept="image/jpeg,image/png,image/webp"
+            :accept="POST_MEDIA_ACCEPT"
             multiple
             :file-list="uploadFileList"
-            :before-upload="beforeImageUpload"
-            :on-success="handleImageUploadSuccess"
-            :on-remove="handleImageRemove"
-            :on-preview="handleImagePreview"
+            :before-upload="beforeMediaUpload"
+            :on-change="handleMediaUploadChange"
+            :on-success="handleMediaUploadSuccess"
+            :on-error="handleMediaUploadError"
+            :on-remove="handleMediaRemove"
           >
+            <template #file="{ file }">
+              <div
+                class="upload-media-card"
+                :class="{
+                  'upload-media-card-pending': getUploadCardStatus(file) === 'pending',
+                  'upload-media-card-failed': getUploadCardStatus(file) === 'failed',
+                }"
+              >
+                <template v-if="isUploadedMediaReady(file)">
+                  <img
+                    v-if="getUploadFileMediaType(file) === 'image'"
+                    :src="file.url"
+                    class="upload-media-thumb"
+                    alt="已上传媒体"
+                  />
+                  <video
+                    v-else
+                    :src="file.url"
+                    class="upload-media-thumb"
+                    muted
+                    playsinline
+                    preload="metadata"
+                  />
+                  <div class="upload-media-overlay">
+                    <button
+                      type="button"
+                      class="upload-media-action"
+                      @click.stop="handleMediaPreview(file)"
+                    >
+                      <el-icon><ZoomIn /></el-icon>
+                    </button>
+                    <button
+                      type="button"
+                      class="upload-media-action"
+                      @click.stop="removeUploadFile(file)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                  </div>
+                  <span class="upload-media-badge">
+                    {{ getUploadFileMediaType(file) === 'video' ? '视频' : '图片' }}
+                  </span>
+                </template>
+                <span v-else class="upload-media-pending-text">{{ getUploadStatusText(file) }}</span>
+              </div>
+            </template>
             <el-icon><Plus /></el-icon>
           </el-upload>
-          <div class="field-tip">支持 JPG、PNG、WEBP，单张不超过 2MB，可连续上传多张。</div>
+          <div class="field-tip">
+            支持 JPG、PNG、WEBP、MP4、WEBM、OGG、MOV；图片单个不超过 2MB，视频单个不超过
+            50MB，可混合连续上传。
+          </div>
         </el-form-item>
       </el-form>
 
@@ -317,22 +407,57 @@
 
     <el-dialog
       v-model="previewVisible"
-      title="图片预览"
+      :title="previewMediaType === 'video' ? '视频预览' : '图片预览'"
       width="min(720px, calc(100vw - 24px))"
       top="4vh"
       class="post-preview-dialog"
     >
-      <img v-if="previewImageUrl" :src="previewImageUrl" class="preview-image" alt="预览图片" />
+      <img
+        v-if="previewMediaUrl && previewMediaType === 'image'"
+        :src="previewMediaUrl"
+        class="preview-image"
+        alt="预览图片"
+      />
+      <video
+        v-else-if="previewMediaUrl"
+        :src="previewMediaUrl"
+        class="preview-video"
+        controls
+        autoplay
+        playsinline
+      />
     </el-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox, type UploadFile, type UploadFiles, type UploadProps } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import {
+  ElMessage,
+  ElMessageBox,
+  type UploadFile,
+  type UploadFiles,
+  type UploadProps,
+} from 'element-plus'
+import { Delete, Plus, ZoomIn } from '@element-plus/icons-vue'
 import { useSiteInfoStore } from '@/stores/siteInfo'
-import { deletePost, getPostsList, getPostsPublicData, pushPosts, updatePost } from '@/api/userPostsController'
+import {
+  deletePost,
+  getPostsList,
+  getPostsPublicData,
+  pushPosts,
+  updatePost,
+} from '@/api/userPostsController'
+import {
+  POST_IMAGE_MAX_SIZE_MB,
+  POST_MEDIA_ACCEPT,
+  POST_VIDEO_MAX_SIZE_MB,
+  getPostMediaType,
+  isPostImageMimeType,
+  isPostVideoMimeType,
+  normalizePostMediaUrl,
+  type PostMediaType,
+} from '@/utils/postMedia'
 
 type QuickFilterKey = 'all' | 'top' | 'public' | 'private'
 type ActiveFilterKey = 'content' | 'postType' | 'mood' | 'privacy'
@@ -349,10 +474,12 @@ const editingPostId = ref<number>()
 const postPublicData = ref<API.PostPublicData>({})
 const uploadFileList = ref<UploadUserFile[]>([])
 const previewVisible = ref(false)
-const previewImageUrl = ref('')
+const previewMediaUrl = ref('')
+const previewMediaType = ref<PostMediaType>('image')
 
 type UploadUserFile = UploadFile & {
   responsePath?: string
+  mediaType?: PostMediaType
 }
 
 const pagination = reactive({
@@ -380,10 +507,7 @@ const postForm = reactive<API.PostPushRequest>({
 const tagsText = ref('')
 const isTopSwitch = ref(false)
 
-const mapToOptions = (
-  source?: Record<string, any>,
-  emptyLabel?: string,
-) => {
+const mapToOptions = (source?: Record<string, any>, emptyLabel?: string) => {
   return Object.entries(source || {})
     .map(([key, label]) => {
       const normalizedLabel = String(label ?? '').trim()
@@ -409,11 +533,11 @@ const privatePrivacyValue = computed(() => {
   return privacyOptions.value.find((item) => item.label.includes('私密'))?.value
 })
 
-const publicCount = computed(() =>
-  tableData.value.filter((item) => item.privacy === publicPrivacyValue.value).length,
+const publicCount = computed(
+  () => tableData.value.filter((item) => item.privacy === publicPrivacyValue.value).length,
 )
-const privateCount = computed(() =>
-  tableData.value.filter((item) => item.privacy === privatePrivacyValue.value).length,
+const privateCount = computed(
+  () => tableData.value.filter((item) => item.privacy === privatePrivacyValue.value).length,
 )
 
 const quickFilters = computed(() => [
@@ -508,89 +632,185 @@ const fetchPostsPublicData = async () => {
   }
 }
 
-const normalizeImage = (value?: string) => {
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
+const getMediaType = (value?: string, mimeType?: string) => getPostMediaType(value, mimeType)
 
-  const baseUrl = String(siteInfo.imageUrl || '').trim()
-  if (!baseUrl) return value
+const normalizeMedia = (value?: string) => normalizePostMediaUrl(value, siteInfo.imageUrl)
 
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const normalizedPath = value.startsWith('/') ? value : `/${value}`
-  return `${normalizedBase}${normalizedPath}`
+const getImagePreviewList = (mediaList?: string[]) =>
+  (mediaList || [])
+    .filter((media) => getMediaType(media) === 'image')
+    .map((media) => normalizeMedia(media))
+    .filter(Boolean)
+
+const resolveUploadedMediaPath = (response?: API.BaseResponseBlogimages) => {
+  return response?.data?.fileUrl || response?.data?.filePath || response?.data?.thumbPath || ''
 }
 
-const resolveUploadedImagePath = (response?: API.BaseResponseBlogimages) => {
+const syncPostMediaList = () => {
+  postForm.imageList = uploadFileList.value
+    .map((file) => file.responsePath || file.url || '')
+    .filter(Boolean)
+}
+
+const buildTrackedUploadFile = (file: UploadFile | UploadUserFile): UploadUserFile => {
+  const uploadFile = file as UploadUserFile
+  const previousFile = uploadFileList.value.find((item) => item.uid === uploadFile.uid)
+  const responsePath = uploadFile.responsePath || previousFile?.responsePath
+  const mediaType =
+    uploadFile.mediaType ||
+    previousFile?.mediaType ||
+    getMediaType(responsePath || uploadFile.name, uploadFile.raw?.type)
+
+  return {
+    ...uploadFile,
+    url: responsePath ? normalizeMedia(responsePath) : undefined,
+    status: responsePath ? 'success' : uploadFile.status,
+    responsePath,
+    mediaType,
+  }
+}
+
+const syncTrackedUploadFileList = (uploadFiles: UploadFiles | UploadUserFile[]) => {
+  uploadFileList.value = uploadFiles.map((file) => buildTrackedUploadFile(file))
+}
+
+const getUploadFileMediaType = (file: UploadFile | UploadUserFile) => {
+  const uploadFile = file as UploadUserFile
   return (
-    response?.data?.fileUrl ||
-    response?.data?.filePath ||
-    response?.data?.thumbPath ||
-    ''
+    uploadFile.mediaType ||
+    getMediaType(uploadFile.responsePath || uploadFile.url || uploadFile.name, uploadFile.raw?.type)
   )
+}
+
+const isUploadedMediaReady = (file: UploadFile | UploadUserFile) => {
+  const uploadFile = file as UploadUserFile
+  return Boolean(uploadFile.responsePath || (uploadFile.status === 'success' && uploadFile.url))
+}
+
+const getUploadCardStatus = (file: UploadFile | UploadUserFile) => {
+  const uploadFile = file as UploadUserFile
+  if (isUploadedMediaReady(uploadFile)) return 'ready'
+  if (uploadFile.status === 'fail') return 'failed'
+  return 'pending'
+}
+
+const getUploadStatusText = (file: UploadFile | UploadUserFile) => {
+  const uploadFile = file as UploadUserFile
+  if (uploadFile.status === 'fail') return '上传失败'
+
+  const percentage =
+    typeof uploadFile.percentage === 'number' ? Math.round(uploadFile.percentage) : undefined
+
+  return percentage != null && percentage > 0 ? `上传中 ${percentage}%` : '上传中...'
+}
+
+const markUploadFileAsFailed = (targetUid: number, uploadFiles: UploadFiles) => {
+  uploadFileList.value = uploadFiles.map((file) => {
+    const currentFile = buildTrackedUploadFile(file)
+    if (currentFile.uid === targetUid) {
+      currentFile.status = 'fail'
+      currentFile.url = undefined
+      currentFile.responsePath = undefined
+    }
+    return currentFile
+  })
 }
 
 const syncUploadFileListFromImageList = (imageList?: string[]) => {
   uploadFileList.value = (imageList || []).map((image, index) => ({
     uid: -(index + 1),
-    name: `image-${index + 1}`,
-    url: normalizeImage(image),
+    name: `${getMediaType(image)}-${index + 1}`,
+    url: normalizeMedia(image),
     status: 'success',
     responsePath: image,
+    mediaType: getMediaType(image),
   }))
 }
 
-const beforeImageUpload: UploadProps['beforeUpload'] = (file) => {
-  const isAllowedType = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+const beforeMediaUpload: UploadProps['beforeUpload'] = (file) => {
+  const isAllowedType = isPostImageMimeType(file.type) || isPostVideoMimeType(file.type)
   if (!isAllowedType) {
-    ElMessage.error('图片仅支持 JPG、PNG、WEBP 格式')
+    ElMessage.error('仅支持 JPG、PNG、WEBP、MP4、WEBM、OGG、MOV 格式')
     return false
   }
 
-  const isLt2M = file.size / 1024 / 1024 < 2
-  if (!isLt2M) {
-    ElMessage.error('图片大小不能超过 2MB')
+  const mediaType = getMediaType(file.name, file.type)
+  const maxSize = mediaType === 'video' ? POST_VIDEO_MAX_SIZE_MB : POST_IMAGE_MAX_SIZE_MB
+
+  if (file.size / 1024 / 1024 > maxSize) {
+    ElMessage.error(`${mediaType === 'video' ? '视频' : '图片'}大小不能超过 ${maxSize}MB`)
     return false
   }
 
   return true
 }
 
-const handleImageUploadSuccess = (response: API.BaseResponseBlogimages, uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+const handleMediaUploadChange: UploadProps['onChange'] = (_uploadFile, uploadFiles) => {
+  syncTrackedUploadFileList(uploadFiles)
+}
+
+const handleMediaUploadSuccess = (
+  response: API.BaseResponseBlogimages,
+  uploadFile: UploadFile,
+  uploadFiles: UploadFiles,
+) => {
   if (response.code !== 0) {
-    ElMessage.error(response.msg || '图片上传失败')
+    markUploadFileAsFailed(uploadFile.uid, uploadFiles)
+    ElMessage.error(response.msg || '媒体上传失败')
     return
   }
 
-  const uploadedPath = resolveUploadedImagePath(response)
+  const uploadedPath = resolveUploadedMediaPath(response)
   if (!uploadedPath) {
-    ElMessage.error('图片上传失败，未返回图片地址')
+    markUploadFileAsFailed(uploadFile.uid, uploadFiles)
+    ElMessage.error('媒体上传失败，未返回文件地址')
     return
   }
 
-  uploadFileList.value = uploadFiles.map((file) => {
+  const nextUploadFiles = uploadFiles.map((file) => buildTrackedUploadFile(file))
+
+  uploadFileList.value = nextUploadFiles.map((file) => {
     const currentFile = file as UploadUserFile
     if (file.uid === uploadFile.uid) {
-      currentFile.url = normalizeImage(uploadedPath)
+      currentFile.url = normalizeMedia(uploadedPath)
+      currentFile.status = 'success'
       currentFile.responsePath = uploadedPath
+      currentFile.mediaType = getMediaType(
+        uploadedPath || response.data?.imageName,
+        response.data?.fileType || uploadFile.raw?.type,
+      )
     }
     return currentFile
   })
 
-  postForm.imageList = uploadFileList.value
-    .map((file) => file.responsePath || file.url || '')
-    .filter(Boolean)
+  syncPostMediaList()
 }
 
-const handleImageRemove: UploadProps['onRemove'] = (uploadFile, uploadFiles) => {
-  uploadFileList.value = uploadFiles as UploadUserFile[]
-  postForm.imageList = uploadFileList.value
-    .map((file) => file.responsePath || file.url || '')
-    .filter(Boolean)
+const handleMediaUploadError: UploadProps['onError'] = (_error, _uploadFile, uploadFiles) => {
+  syncTrackedUploadFileList(uploadFiles)
 }
 
-const handleImagePreview: UploadProps['onPreview'] = (file) => {
-  previewImageUrl.value = file.url || ''
+const handleMediaRemove: UploadProps['onRemove'] = (_uploadFile, uploadFiles) => {
+  syncTrackedUploadFileList(uploadFiles as UploadUserFile[])
+  syncPostMediaList()
+}
+
+const handleMediaPreview = (file: UploadFile | UploadUserFile) => {
+  const uploadFile = file as UploadUserFile
+  previewMediaUrl.value = uploadFile.url || normalizeMedia(uploadFile.responsePath)
+  previewMediaType.value = getUploadFileMediaType(uploadFile)
   previewVisible.value = true
+}
+
+const openPreviewByUrl = (value?: string) => {
+  previewMediaUrl.value = normalizeMedia(value)
+  previewMediaType.value = getMediaType(value)
+  previewVisible.value = true
+}
+
+const removeUploadFile = (file: UploadFile | UploadUserFile) => {
+  uploadFileList.value = uploadFileList.value.filter((item) => item.uid !== file.uid)
+  syncPostMediaList()
 }
 
 const fetchPosts = async () => {
@@ -770,9 +990,13 @@ const handleSubmitPost = async () => {
       return
     }
 
-    ElMessage.error(res.data.msg || (dialogMode.value === 'create' ? '说说发布失败' : '说说更新失败'))
+    ElMessage.error(
+      res.data.msg || (dialogMode.value === 'create' ? '说说发布失败' : '说说更新失败'),
+    )
   } catch {
-    ElMessage.error(dialogMode.value === 'create' ? '说说发布失败，请稍后重试' : '说说更新失败，请稍后重试')
+    ElMessage.error(
+      dialogMode.value === 'create' ? '说说发布失败，请稍后重试' : '说说更新失败，请稍后重试',
+    )
   } finally {
     submitting.value = false
   }
@@ -1098,17 +1322,51 @@ button.summary-pill {
   word-break: break-word;
 }
 
-.image-row {
+.media-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
+.post-media,
 .post-image {
   width: 74px;
   height: 74px;
   border-radius: 16px;
   overflow: hidden;
+}
+
+.post-video-card {
+  position: relative;
+  width: 74px;
+  height: 74px;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0f172a;
+  cursor: pointer;
+}
+
+.post-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-video-badge,
+.upload-media-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .meta-stack,
@@ -1186,6 +1444,70 @@ button.summary-pill {
   border-radius: 18px;
 }
 
+.upload-media-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.86));
+}
+
+.upload-media-card-pending {
+  display: grid;
+  place-items: center;
+}
+
+.upload-media-card-failed {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, rgba(127, 29, 29, 0.92), rgba(153, 27, 27, 0.82));
+}
+
+.upload-media-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upload-media-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.48);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.upload-media-card:hover .upload-media-overlay {
+  opacity: 1;
+}
+
+.upload-media-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.upload-media-pending-text {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  padding: 0 10px;
+}
+
 .action-group {
   display: flex;
   align-items: center;
@@ -1203,6 +1525,14 @@ button.summary-pill {
   display: block;
   width: 100%;
   border-radius: 16px;
+}
+
+.preview-video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  border-radius: 16px;
+  background: #000;
 }
 
 :deep(.post-table .el-table__cell) {
